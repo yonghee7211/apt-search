@@ -44,9 +44,11 @@ def load_and_process_bjd():
             sigungu, dong = "", ""
         return [sido, sigungu, dong]
     
-    # 🚀 최신 판다스 버전에 맞춰 안전하게 3개의 컬럼으로 분리하여 할당 (에러 해결!)
+    # 🚀 [가장 확실한 해결책] 버전에 관계없이 무조건 작동하도록 한 줄씩 따로 담기!
     parsed_data = df["법정동명"].apply(split_bjd_name).tolist()
-    df[["시도", "시군구", "읍면동"]] = pd.DataFrame(parsed_data, index=df.index)
+    df["시도"] = [x[0] for x in parsed_data]
+    df["시군구"] = [x[1] for x in parsed_data]
+    df["읍면동"] = [x[2] for x in parsed_data]
     
     # 동 정보가 없는 시군구 자체 행은 제외
     df = df[df["읍면동"] != ""]
