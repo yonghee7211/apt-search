@@ -8,63 +8,46 @@ st.set_page_config(layout="wide")
 st.title("전국 아파트 실거래가 정밀 조회 (동별 필터링) 🏠")
 st.write("법정동코드 CSV 데이터를 활용하여 전국의 모든 읍/면/동 실거래가를 조회합니다.")
 
-# 직접 제공해주신 인증키
 API_KEY = "cb76cc0d703ce4fd87a3359499af7aa653f7698a0db899daa0d7e68882fa5e2a"
 
-# [핵심] 대용량 CSV 파일을 깨짐 없이 안전하게 읽어오는 함수
+# [핵심] 보내주신 파일 구조에 완벽히 맞춘 데이터 전처리 함수
 @st.cache_data
 def load_and_process_bjd():
-    df = None
-    # 에러를 엄격하게 잡아내는 utf-8 규격들을 먼저 시도합니다.
-    encodings = ["utf-8", "utf-8-sig", "cp949", "euc-kr"]
-    
-    for enc in encodings:
-        try:
-            test_df = pd.read_csv("법정동코드.csv", encoding=enc)
-            # 글자가 깨지지 않고 정상적으로 '법정동코드' 컬럼이 읽혔는지 검사
-            if "법정동코드" in test_df.columns:
-                df = test_df
-                break
-        except:
-            continue
-            
-    # 파일 읽기에 완전히 실패했거나 컬럼명이 다를 때의 예외 처리
-    if df is None:
-        st.error("🚨 '법정동코드.csv' 파일을 읽지 못했거나 한글 인코딩이 맞지 않습니다. 파일 상태를 확인해 주세요.")
-        return pd.DataFrame(columns=["시도", "시군구", "읍면동", "법정동코드"])
+    try:
+        # 파일 읽기
+        df = pd.read_csv("법정동코드.csv", encoding="cp949", dtype=str)
+    except:
+        df = pd.read_csv("법정동코드.csv", encoding="utf-8", dtype=str)
         
-    # '폐지여부' 컬럼이 존재하는 경우에만 '존재'하는 지역 필터링 (컬럼명 불일치 방지)
+    # 🚀 [범인 검거 완료] '존재' 한글뿐만 아니라 영어 'exst'도 살아있는 지역으로 취급!
     if "폐지여부" in df.columns:
-        df = df[df["폐지여부"] == "존재"]
-    
-    # 법정동 코드를 10자리 문자열로 안전하게 맞추기
+        df = df[df["폐지여부"].str.lower().isin(["존재", "exst"])]
+        
+    # 법정동 코드를 10자리로 맞추기
     df["법정동코드"] = df["법정동코드"].astype(str).str.zfill(10)
     
     # 시도, 시군구, 읍면동 분리하는 함수
     def split_bjd_name(name):
         parts = str(name).split()
         sido = parts[0] if len(parts) > 0 else ""
-        
         if len(parts) == 2:
-            sigungu = parts[1]
-            dong = ""
+            sigungu, dong = parts[1], ""
         elif len(parts) == 3:
-            sigungu = parts[1]
-            dong = parts[2]
+            sigungu, dong = parts[1], parts[2]
         elif len(parts) >= 4:
             sigungu = " ".join(parts[1:-1])
             dong = parts[-1]
         else:
             sigungu, dong = "", ""
         return [sido, sigungu, dong]
-    
-    # 안전하게 한 줄씩 분리하여 새 컬럼 생성
+        
+    # 안전하게 쪼개서 담기
     parsed_data = df["법정동명"].apply(split_bjd_name).tolist()
     df["시도"] = [x[0] for x in parsed_data]
     df["시군구"] = [x[1] for x in parsed_data]
     df["읍면동"] = [x[2] for x in parsed_data]
     
-    # 구 단위 자체 행을 제외하고 실제 '동' 정보가 있는 행만 추출
+    # 실제 '동' 정보가 있는 행만 추출 (시/도, 시/군/구 자체 코드 제외)
     df = df[df["읍면동"] != ""]
     return df
 
@@ -72,9 +55,8 @@ def load_and_process_bjd():
 with st.spinner("전국 법정동 데이터를 분석하고 있습니다... 잠시만 기다려주세요."):
     bjd_data = load_and_process_bjd()
 
-# 만약 데이터가 비어있다면 화면 비활성화 및 경고창 안내
 if bjd_data.empty:
-    st.warning("⚠️ 법정동 데이터를 불러오지 못했습니다. CSV 파일의 컬럼명(법정동코드, 법정동명, 폐지여부)을 확인해 주세요.")
+    st.error("🚨 여전히 데이터를 불러오지 못했습니다. 파일 이름을 다시 한번 확인해 주세요.")
 else:
     # --- 화면에 선택 상자 배치 ---
     col1, col2, col3, col4 = st.columns(4)
@@ -108,7 +90,7 @@ else:
     # --- 데이터 조회 및 필터링 동작 ---
     if st.button("실거래가 데이터 조회하기", type="primary"):
         if not lawd_cd:
-            st.error("지역 선택이 진행 중이거나 올바르지 않습니다. 지역을 다시 선택해 주세요.")
+            st.error("지역을 정확히 선택해 주세요.")
         else:
             st.info(f"🛰️ {selected_sido} {selected_sigungu} {selected_dong} 데이터를 분석 중입니다...")
             
